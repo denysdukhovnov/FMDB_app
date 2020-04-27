@@ -4,15 +4,12 @@ library(shinyWidgets)     # For cool buttons, sliders, checkboxes, etc.
 library(leaflet)          # For interactive maps
 library(DT)               # For fancy interactive data table 
 library(shinycssloaders)  # For spinner wheel 
-#library(rgeos)
 library(sf)               # Reading and manipulating shapes
-#library(rgdal)
-#library(ggplot2)
-#library(plotly)
-library(dplyr)
 library(htmltools)
 library(RColorBrewer)
 
+
+#load("map_dept.RData")
 
 header <- dashboardHeader(
   title = "French Mortality Database", titleWidth = 400
@@ -43,12 +40,7 @@ body <- dashboardBody(
                Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
                     paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")),
                style = "height:100vh - 30vh;"
-               )#,    
-
-           # box(width = NULL, HTML(" <em> French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
-           #     Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
-           #     paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")) 
-           #     )
+               )
           ),
     
     column(width = 3,
@@ -70,17 +62,6 @@ body <- dashboardBody(
            
               )
           )
-  
- # fluidRow(
-    
-    # column(width = 9,
-    #        box(width = NULL, solidHeader = TRUE, plotlyOutput("mxcontour", height = 550, width = 600)
-    #        )
-    # ),
-    
-    
-   # ),
-    
 
      )
  )
@@ -95,10 +76,6 @@ ui <- dashboardPage(
                     body
                   )
 
-
-
-
-##### SERVER
 
 server <- function(input, output, session) {
   
@@ -117,16 +94,7 @@ server <- function(input, output, session) {
     return(df2)
   })
   
-  # # Set up regional life table data to be called based on user input
-  # region.data <- reactive({
-  #   
-  #   input$applyInput # Asserting dependency on pressing of the Apply Changes button
-  #   
-  #   sex.vec <- c("BLT.REG", "MLT.REG", "FLT.REG")
-  #   df <- get(sex.vec[isolate(as.numeric(input$sex))])
-  #   df1 <- df[, c("PopName", "Year", "Age", "mx", "ex")]
-  # })  
-  
+
   # Showing life table
   output$table.lt <- DT::renderDataTable({
     
@@ -146,36 +114,6 @@ server <- function(input, output, session) {
     )
   })  
   
-  # Make a mortality contour map
-  # output$mxcontour<- renderPlotly({
-  #   
-  #   input$applyInput
-  #   
-  #   contourplot <- plot_ly(x = seq(0, 110, 1),
-  #                          y = sort(unique(BLT$Year[!is.na(BLT$Year)]), decreasing = FALSE),
-  #                          z = matrix(region.data()$mx[region.data()$PopName == "Reg1"] * 1000, 
-  #                                     nrow = length(unique(BLT$Year[!is.na(BLT$Year)])), 
-  #                                     byrow = TRUE),
-  #                          colors = rev(heat.colors(20)),
-  #                          type = "contour"#,
-  #                          # text = ~paste0("Age: ", seq(0, 110, 1), "<br>",
-  #                          #               "Year: ", sort(unique(BLT$Year[!is.na(BLT$Year)]), decreasing = FALSE), "<br>",
-  #                          #               "Deaths per 1000: ", matrix(region.data()$mx[region.data()$PopName == "Reg1"] * 1000, 
-  #                          #                                           nrow = length(unique(BLT$Year[!is.na(BLT$Year)])), 
-  #                          #                                           byrow = TRUE)),
-  #                          # hoverinfo = text
-  #   ) %>%
-  #     
-  #     layout(title = paste0(isolate(ifelse(input$sex == "1", "Both sex",
-  #                                          ifelse(input$sex == "2", "Male",
-  #                                                 ifelse(input$sex == "3", "Female", stopApp())))), " deaths per 1000, by year and age"),
-  #            xaxis = list(title = "Age"), yaxis = list(title = "Year")
-  #     ) %>% 
-  #     
-  #     colorbar(title = "Mortality rate per 1000")
-  #   
-  #   contourplot
-  # })
   
   # Creating a map
   output$FMDB <- renderLeaflet({
