@@ -8,6 +8,7 @@ library(sf)               # Reading and manipulating shapes
 library(htmltools)
 library(RColorBrewer)
 
+source("./global.R")
 
 #load("map_dept.RData")
 
