@@ -11,6 +11,8 @@ library(RColorBrewer)
 
 #load("map_dept.RData")
 
+
+
 header <- dashboardHeader(
   title = "French Mortality Database", titleWidth = 400
   #navbarPage(header=tags$head(tags$style(type='text/css', ".irs-grid-text { font-size: 20pt; }")))
@@ -45,14 +47,14 @@ body <- dashboardBody(
     
     column(width = 3,
            box(width = NULL,
-               p(enc2utf8("Faites vos choix ci-dessous, ensuite cliquez 'Mettre à jour' pour rafraîchir la carte"), style = "color: grey; font-size: 16px"),
-               awesomeRadio("lt.column", h4("Quelle quantité de la table de mortalite afficher ?"),
+               p(enc2utf8("Faites vos choix ci-dessous, ensuite cliquez 'Actualiser' pour rafraîchir la carte"), style = "color: grey; font-size: 16px"),
+               awesomeRadio("lt.column", h4("Indicateur"),
                             choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
                awesomeRadio("sex", h4("Sexe"), choices = list("Hommes" = 1, "Femmes" = 2), inline = TRUE),
                
                sliderInput("age", h4("Âge"), min = 0, max = 110, value = 0, sep = "", step = 1),
                sliderInput("year", h4("Année (période)"), min = min(years), max = max(years), value = max(years), sep = "", step = 1),
-               actionBttn("applyInput", "Mettre à jour", style = "unite", block = TRUE)
+               actionBttn("applyInput", "Actualiser", style = "unite", block = TRUE)
               )
            
           ),
@@ -103,7 +105,7 @@ server <- function(input, output, session) {
     table.data <- st_set_geometry(spdf.data(), NULL) # Getting rid of the geometry column of sf to be able to extract tabular data
     
     datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "Age", "mx", "ex")], 
-              rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "Espérance de vie à l'âge x"),
+              rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à X an(s)"),
               class = "cell-border compact hover", 
               caption = htmltools::tags$caption(paste0("Table de mortalité départementale pour les ", 
                                                        ifelse(isolate(input$sex) == "1", "hommes",
@@ -148,17 +150,21 @@ server <- function(input, output, session) {
                   popup = paste0("<b>", map.dept$nom_dept, " (", isolate(input$year), ", ", 
                                  isolate(ifelse(input$sex == "1", "hommes",
                                                 ifelse(input$sex == "2", "femmes", NA))), ")", "</b>",
-                                 "<br>", "Nombre de décès de l'âge ", map.dept$Age, " pour 1000 habitants = ",  map.dept$mx,
-                                 "<br>", "L'espérance de vie à l'âge ", map.dept$Age[1], " = ", map.dept$ex, " ans"),
+                                 "<br>", "Nombre de décès à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
+                                   " pour 1000 habitants = ",  round(map.dept$mx, 2),
+                                 "<br>", "L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
+                                   " = ", round(map.dept$ex, 2), " ans"),
                   highlightOptions = highlightOptions(fillColor = "yellow", fillOpacity = 0.6, weight = 2)) %>%
       
       addLegend(pal = colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, 
                                     seq(min(quantColor, na.rm = T), max(quantColor, na.rm = T), 
                                         (max(quantColor, na.rm = T) - min(quantColor, na.rm = T))/5), 
                                     n = 5),
-                values = seq(min(quantColor), max(quantColor), (max(quantColor) - min(quantColor))/5),
-                title = paste0(isolate(ifelse(input$lt.column == "mx", paste0("Nombre de décès de l'âge ", map.dept$Age[1], " pour 1000 habitants "),
-                                              paste0("L'espérance de vie à l'âge ", map.dept$Age[1]))),
+                values = round(seq(min(quantColor), max(quantColor), (max(quantColor) - min(quantColor))/5), 2),
+                title = paste0(isolate(ifelse(input$lt.column == "mx", paste0("Nombre de décès à ", map.dept$Age[1], 
+                                                                              if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
+                                                                              " pour 1000 habitants "),
+                                              paste0("L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"}))),
                                "<br>", "(", isolate(input$year), ", ",
                                isolate(ifelse(input$sex == "1", "hommes",
                                               ifelse(input$sex == "2", "femmes", stopApp()))), "):"),
@@ -172,9 +178,17 @@ server <- function(input, output, session) {
       addMiniMap(
         tiles = providers$CartoDB.Positron,
         position = 'topright',
-        width = 175, height = 175,
+        # width = 175, height = 175,
         toggleDisplay = FALSE,
-        aimingRectOptions = list(color = 'grey'), shadowRectOptions = list(color = 'orange'))
+        # aimingRectOptions = list(color = 'grey'), shadowRectOptions = list(color = 'orange'),
+        
+        width = 300, height = 300,
+        centerFixed = c(46.70, 3.30), 
+        zoomLevelFixed = 7,
+        aimingRectOptions = list(color = "grey", clickable = TRUE, weight = 1), shadowRectOptions = list(color = NA)
+        
+        
+        )
     
     map1
     
@@ -182,55 +196,7 @@ server <- function(input, output, session) {
   
   # ### WIP ()
   # # Updating the polygons upon options selection without reloading the basemap
-  # observe({
-  #   
-  #   map.dept <- spdf.data()
-  #   
-  #   lt.col <- reactive({isolate(input$lt.column)})
-  #   
-  #   quantColor <- if (lt.col() == "mx") {
-  #     unique(quantile(map.dept$mx, n = 5, na.rm = T))}
-  #   else if (lt.col() == "ex") {
-  #     unique(quantile(map.dept$ex, n = 5, na.rm = T))}
-  #   
-  #   leafletProxy("FMDB", data = map.dept) %>% 
-  #     
-  #     clearShapes() %>% 
-  #     
-  #     clearControls() %>% 
-  #     
-  #     addPolygons(data = map.dept,
-  #                 color = "white",
-  #                 weight = 2,
-  #                 opacity = 0.5,
-  #                 fillColor = brewer.pal(n = length(quantColor), if (lt.col() == "mx") {"Reds"} 
-  #                                        else if (lt.col() == "ex") {"Blues"}),
-  #                 #~quantColor_function(if (lt.col() == "mx") {mx} else if (lt.col() == "ex") {ex}),
-  #                 fillOpacity = 0.65,
-  #                 popup = paste0("<b>", map.dept$nom_dept, " (", isolate(input$year), ", ", 
-  #                                isolate(ifelse(input$sex == "1", "hommes",
-  #                                               ifelse(input$sex == "2", "femmes", NA))), ")", "</b>",
-  #                                "<br>", "Nombre de décès de l'âge ", map.dept$Age, " pour 1000 habitants = ",  map.dept$mx,
-  #                                "<br>", "L'espérance de vie à l'âge ", map.dept$Age[1], " = ", map.dept$ex, " ans"),
-  #                 highlightOptions = highlightOptions(fillColor = "yellow", fillOpacity = 0.6, weight = 2)) %>%
-  #     
-  #     addLegend(pal = colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, quantColor),#quantColor_function,
-  #               values = if (lt.col() == "mx") {map.dept$mx} else if (lt.col() == "ex") {map.dept$ex},
-  #               title = paste0(isolate(ifelse(input$lt.column == "mx", paste0("Nombre de décès de l'âge ", map.dept$Age[1], " pour 1000 habitants "),
-  #                                             paste0("L'espérance de vie à l'âge ", map.dept$Age[1]))),
-  #                              "<br>", "(", isolate(input$year), ", ",
-  #                              isolate(ifelse(input$sex == "1", "hommes",
-  #                                             ifelse(input$sex == "2", "femmes", stopApp()))), "):"),
-  #               position = "bottomleft",
-  #               opacity = 1,
-  #               labFormat = function(type, cuts, p) {
-  #                 n <- length(cuts)
-  #                 cuts <- paste0(format(cuts[-n], big.mark = ","),
-  #                                " - ", format(cuts[-1], big.mark = ","))})
-  # })
-  
-  
-  
+
 }
 
 shinyApp(ui = ui, server = server)
