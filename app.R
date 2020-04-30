@@ -35,7 +35,7 @@ body <- dashboardBody(
                #map {height: calc(100vh - 80px) !important;}
                "),
     
-    column(width = 9, 
+    column(width = 6, 
            box(width = NULL, solidHeader = TRUE,
                withSpinner(leafletOutput("FMDB", height = 900), type = 6),
                HTML(" <em> Source: French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
@@ -46,7 +46,20 @@ body <- dashboardBody(
           ),
     
     column(width = 3,
-           box(width = NULL,
+           box(width = NULL, solidHeader = TRUE, 
+               h3(strong("Paris et les environs")),
+               withSpinner(leafletOutput("FMDB.Paris", height = 380), type = 6),
+               style = "height:46vh;"
+           ),
+           
+           box(width = NULL, solidHeader = TRUE,
+               HTML("THIS IS A PLACEHOLDER FOR A PLOT"),
+               style = "height:40vh;"
+           )
+    ),
+    
+    column(width = 3,
+           box(width = NULL, solidHeader = TRUE,
                p(enc2utf8("Faites vos choix ci-dessous, ensuite cliquez 'Actualiser' pour rafraîchir la carte"), style = "color: grey; font-size: 16px"),
                awesomeRadio("lt.column", h4("Indicateur"),
                             choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
@@ -60,7 +73,7 @@ body <- dashboardBody(
           ),
     
     column(width = 3, 
-           box(width = NULL, DT::dataTableOutput("table.lt"), style = "height:400px; overflow-y: scroll;"
+           box(width = NULL, solidHeader = TRUE, DT::dataTableOutput("table.lt"), style = "height:400px;" #overflow-y: scroll;"
            
               )
           )
@@ -112,14 +125,14 @@ server <- function(input, output, session) {
                                                                             ifelse(isolate(input$sex) == "2", "femmes", stopApp())),
                                                        ifelse(isolate(input$sex) == 1, " agés ", " agées "), isolate(input$age), " en ", isolate(input$year)), 
                                                 style = "color:red; font-size:16px;"), 
-              options = list(searching = FALSE, paging = FALSE)
+              options = list(searching = FALSE, paging = FALSE, scrollY = "200px")
     )
   })  
   
   
-  # Creating a map
-  output$FMDB <- renderLeaflet({
-    
+  # Pre-define map function to be called later
+  make_leaflet_map <- function() { 
+  
     input$applyInput  # Asserting dependency on pressing of the Apply Changes button
     
     lt.col <- reactive({isolate(input$lt.column)})
@@ -134,13 +147,17 @@ server <- function(input, output, session) {
                   
     map1 <- leaflet() %>%
       
-      addProviderTiles("Stamen.TonerLite",  
-                       options = providerTileOptions(minZoom = 4, maxZoom = 9)) %>%
+      addMapPane("background", zIndex = 410) %>% 
+      addMapPane("polygons", zIndex = 420) %>% 
+      addMapPane("maplabels", zIndex = 430) %>% 
       
-      setView(lat = 46.70, lng = 3.30, zoom = 6) %>%                       
+      addProviderTiles("CartoDB.PositronNoLabels", options = pathOptions(pane = "background")) %>%
+      addProviderTiles("Stamen.TonerLabels", options = pathOptions(pane = "maplabels", opacity = 0.4)) %>%
       
+      #setView(lat = 46.70, lng = 3.30, zoom = 6) %>%                       
       
       addPolygons(data = map.dept,
+                  options = pathOptions(pane = "polygons"),
                   color = "white",
                   weight = 2,
                   opacity = 0.5,
@@ -154,7 +171,7 @@ server <- function(input, output, session) {
                                    " pour 1000 habitants = ",  round(map.dept$mx, 2),
                                  "<br>", "L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " = ", round(map.dept$ex, 2), " ans"),
-                  highlightOptions = highlightOptions(fillColor = "yellow", fillOpacity = 0.6, weight = 2)) %>%
+                  highlightOptions = highlightOptions(fillColor = "cyan", fillOpacity = 0.6, weight = 2)) %>%
       
       addLegend(pal = colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, 
                                     seq(min(quantColor, na.rm = T), max(quantColor, na.rm = T), 
@@ -173,26 +190,38 @@ server <- function(input, output, session) {
                 labFormat = function(type, cuts, p) {
                   n <- length(cuts)
                   cuts <- paste0(format(cuts[-n], big.mark = ","),
-                                 " - ", format(cuts[-1], big.mark = ","))}) %>%
+                                 " - ", format(cuts[-1], big.mark = ","))}) 
       
-      addMiniMap(
-        tiles = providers$CartoDB.Positron,
-        position = 'topright',
-        # width = 175, height = 175,
-        toggleDisplay = FALSE,
-        # aimingRectOptions = list(color = 'grey'), shadowRectOptions = list(color = 'orange'),
-        
-        width = 300, height = 300,
-        centerFixed = c(46.70, 3.30), 
-        zoomLevelFixed = 7,
-        aimingRectOptions = list(color = "grey", clickable = TRUE, weight = 1), shadowRectOptions = list(color = NA)
-        
-        
-        )
+
+    return(map1)
+}
+  
+  
+  # Rendering the main map
+  output$FMDB <- renderLeaflet({
     
-    map1
+    make_leaflet_map() %>% 
+      
+      setView(lat = 46.70, lng = 2.4, zoom = 6) %>% 
+      
+    addMiniMap(
+      tiles = providers$CartoDB.Positron,
+      position = 'topright',
+      width = 175, height = 175,
+      toggleDisplay = FALSE,
+      aimingRectOptions = list(color = 'orange')
+    )
     
   })
+  
+  # Rendering the Paris close-up map
+  output$FMDB.Paris <- renderLeaflet({
+    
+    make_leaflet_map() %>% 
+      setView(lat = 48.85, lng = 2.36, zoom = 9) %>% 
+      clearControls()
+    
+  }) 
   
   # ### WIP ()
   # # Updating the polygons upon options selection without reloading the basemap
