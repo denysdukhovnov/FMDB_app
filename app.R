@@ -1,20 +1,38 @@
-library(shinydashboard)
-library(shiny)
-library(shinyWidgets)     # For cool buttons, sliders, checkboxes, etc.
-library(leaflet)          # For interactive maps
-library(DT)               # For fancy interactive data table 
-library(shinycssloaders)  # For spinner wheel 
-library(sf)               # Reading and manipulating shapes
-library(htmltools)
-library(RColorBrewer)
+library(shiny)              # Base shiny
+library(shinydashboard)     # Dashboard version of shiny
+library(shinydashboardPlus) # Dashboard extras (mainly right sidebar)
+library(shinyWidgets)       # For cool buttons, sliders, checkboxes, etc.
+library(leaflet)            # For interactive maps
+library(DT)                 # For fancy interactive data table 
+library(shinycssloaders)    # For spinner wheel 
+library(sf)                 # Reading and manipulating shapes
+library(htmltools)          # Custom HTML control
+library(RColorBrewer)       # Color palettes
+library(plotly)             # For interactive plots
 
 
-#load("map_dept.RData")
+source("./global.R")
 
 
+header <- dashboardHeaderPlus(disable = FALSE,
+  title = "French Mortality Database", titleWidth = 400,
+  enable_rightsidebar = FALSE, rightSidebarIcon = "gears", 
+  left_menu = tagList(
+    dropdownBlock(
+      id = "additional_options",
+      title = "Réglages",
+      icon = icon("sliders"),
+      prettySwitch(
+        inputId = "colorscale_options",
+        label = "Activer l'échelle des couleurs thématique (décile)",
+        fill = TRUE,
+        bigger = TRUE,
+        status = "primary",
+        value = FALSE
+      )
+    )
+  )
 
-header <- dashboardHeader(
-  title = "French Mortality Database", titleWidth = 400
   #navbarPage(header=tags$head(tags$style(type='text/css', ".irs-grid-text { font-size: 20pt; }")))
 )
 
@@ -33,6 +51,9 @@ body <- dashboardBody(
                span.irs-single {background-color: #3c8dbc;}
                .bttn-unite.bttn-default {color: #3c8dbc; border-color: #3c8dbc;}
                #map {height: calc(100vh - 80px) !important;}
+               span.label.label-danger {display: none !important;}
+               .modebar {display: none !important;}
+               .leaflet-popup-content-wrapper {background-color: rgba(255, 255, 255, 0.85)}
                "),
     
     column(width = 6, 
@@ -41,26 +62,27 @@ body <- dashboardBody(
                HTML(" <em> Source: French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
                Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
                     paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")),
-               style = "height:100vh - 30vh;"
+               style = "height: 100vh - 30vh;"
                )
           ),
     
     column(width = 3,
            box(width = NULL, solidHeader = TRUE, 
-               h3(strong("Paris et les environs")),
+               h3(strong("Paris et les environs"), style = "color: #3c8dbc; text-align: center; margin-top: 0px"),
                withSpinner(leafletOutput("FMDB.Paris", height = 380), type = 6),
-               style = "height:46vh;"
+               style = "height: 43vh;"
            ),
            
            box(width = NULL, solidHeader = TRUE,
-               HTML("THIS IS A PLACEHOLDER FOR A PLOT"),
-               style = "height:40vh;"
+               plotlyOutput("plotly_histogram", height = 380),
+               style = "height: 40vh;"
            )
     ),
     
     column(width = 3,
            box(width = NULL, solidHeader = TRUE,
-               p(enc2utf8("Faites vos choix ci-dessous, ensuite cliquez 'Actualiser' pour rafraîchir la carte"), style = "color: grey; font-size: 16px"),
+               p(enc2utf8("Veuillez choisir l'indicateur, l'âge et le sexe, et cliquez sur 'Actualiser' pour rafraîchir la carte"), 
+                 style = "color: grey; font-size: 16px"),
                awesomeRadio("lt.column", h4("Indicateur"),
                             choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
                awesomeRadio("sex", h4("Sexe"), choices = list("Hommes" = 1, "Femmes" = 2), inline = TRUE),
@@ -84,12 +106,21 @@ body <- dashboardBody(
 
 
 
-ui <- dashboardPage(
+ui <- dashboardPagePlus(
                     skin = "blue",
-                    header,
-                    dashboardSidebar(disable = TRUE),
-                    body
-                  )
+                    header = header,
+                    sidebar = dashboardSidebar(disable = TRUE, width = 0),
+                    # rightsidebar = rightSidebar(width = 400,
+                    #                             rightSidebarTabContent(
+                    #                               id = 1,
+                    #                               icon = "info",
+                    #                               active = TRUE
+                    #                             )
+                    #                ),
+                    sidebar_fullCollapse = TRUE,
+                    body = body
+      )
+
 
 
 server <- function(input, output, session) {
@@ -118,20 +149,66 @@ server <- function(input, output, session) {
     table.data <- st_set_geometry(spdf.data(), NULL) # Getting rid of the geometry column of sf to be able to extract tabular data
     
     datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "Age", "mx", "ex")], 
-              rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à X an(s)"),
+              rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à (x) an(s)"),
               class = "cell-border compact hover", 
               caption = htmltools::tags$caption(paste0("Table de mortalité départementale pour les ", 
                                                        ifelse(isolate(input$sex) == "1", "hommes",
                                                                             ifelse(isolate(input$sex) == "2", "femmes", stopApp())),
                                                        ifelse(isolate(input$sex) == 1, " agés ", " agées "), isolate(input$age), " en ", isolate(input$year)), 
-                                                style = "color:red; font-size:16px;"), 
+                                                style = "color: #3c8dbc; font-size:18px; text-align: center; margin-top: 0px; font-weight: 700"), 
               options = list(searching = FALSE, paging = FALSE, scrollY = "200px")
     )
   })  
   
   
+  # Plotly histogram
+  output$plotly_histogram <- renderPlotly({
+    
+    lt.col <- reactive({isolate(input$lt.column)})
+    
+    map.dept <- if (lt.col() == "mx") {
+                    spdf.data()$mx
+                  } else if (lt.col() == "ex") {
+                    spdf.data()$ex
+                  }
+    
+    labs.x <- if (lt.col() == "mx") {
+                "Taux de mortalité (pour 1000 habitants)"
+              } else if (lt.col() == "ex") {
+                "Espérance de vie (ans)"
+              }
+    
+    layout(
+      
+      plot_ly(
+              x = map.dept,
+              autobinx = TRUE,
+              xbins = list(start = min(map.dept), end = max(map.dept), size = 0.25),
+              alpha = 0.6,
+              type = "histogram",
+              histnorm = "percent"
+      ),
+           #title = "Nombre de départements",
+           xaxis = list(title = labs.x, 
+                        zeroline = FALSE, 
+                        dtick = 1, 
+                        tick0 = 0, 
+                        tickmode = "linear", 
+                        range = c(min(map.dept), max(map.dept))
+                    ),
+      
+      
+           yaxis = list(title = "%", zeroline = FALSE),
+           bargap = 0.05
+      
+      
+    )
+    
+  })
+  
+  
   # Pre-define map function to be called later
-  make_leaflet_map <- function() { 
+  make_leaflet_map <- function(opts = NULL) { 
   
     input$applyInput  # Asserting dependency on pressing of the Apply Changes button
     
@@ -145,7 +222,7 @@ server <- function(input, output, session) {
                   } else if (lt.col() == "ex") {
                     unique(quantile(map.dept$ex, n = 5, na.rm = T))}
                   
-    map1 <- leaflet() %>%
+    map1 <- leaflet(options = opts) %>%
       
       addMapPane("background", zIndex = 410) %>% 
       addMapPane("polygons", zIndex = 420) %>% 
@@ -166,11 +243,12 @@ server <- function(input, output, session) {
                   fillOpacity = 0.65,
                   popup = paste0("<b>", map.dept$nom_dept, " (", isolate(input$year), ", ", 
                                  isolate(ifelse(input$sex == "1", "hommes",
-                                                ifelse(input$sex == "2", "femmes", NA))), ")", "</b>",
+                                                ifelse(input$sex == "2", "femmes", NA))), ", chiffres arrondis)", "</b>",
                                  "<br>", "Nombre de décès à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " pour 1000 habitants = ",  round(map.dept$mx, 2),
                                  "<br>", "L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " = ", round(map.dept$ex, 2), " ans"),
+                  popupOptions = popupOptions(autoPan = FALSE, keepInView = TRUE, alpha = 0.5), 
                   highlightOptions = highlightOptions(fillColor = "cyan", fillOpacity = 0.6, weight = 2)) %>%
       
       addLegend(pal = colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, 
@@ -200,7 +278,7 @@ server <- function(input, output, session) {
   # Rendering the main map
   output$FMDB <- renderLeaflet({
     
-    make_leaflet_map() %>% 
+    make_leaflet_map(opts = leafletOptions()) %>% 
       
       setView(lat = 46.70, lng = 2.4, zoom = 6) %>% 
       
@@ -217,7 +295,7 @@ server <- function(input, output, session) {
   # Rendering the Paris close-up map
   output$FMDB.Paris <- renderLeaflet({
     
-    make_leaflet_map() %>% 
+    make_leaflet_map(opts = leafletOptions(dragging = FALSE, zoomControl = FALSE, minZoom = 9, maxZoom = 9)) %>% 
       setView(lat = 48.85, lng = 2.36, zoom = 9) %>% 
       clearControls()
     

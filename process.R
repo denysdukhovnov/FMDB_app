@@ -72,4 +72,4 @@ for (i in 1:length(years)) {
 }
 
 # Save processed files stored in the environment for faster processing
-#save.image("./map_dept.RData")
+save.image("./map_dept.RData")
