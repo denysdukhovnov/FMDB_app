@@ -12,8 +12,6 @@ library(plotly)             # For interactive plots
 
 source("./global.R")
 
-source("./global.R")
-
 
 header <- dashboardHeaderPlus(disable = FALSE,
   title = "French Mortality Database", titleWidth = 400,
