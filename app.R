@@ -560,9 +560,15 @@ server <- function(input, output, session) {
     # Creating quantile breakdown of mx or ex
     
     quantColor <- if (lt.col() == "mx") {
-      colorBin("Reds", seq(min(map.dept$mx), max(map.dept$mx), length.out = 5), pretty = TRUE, na.color = NA) #unique(quantile(map.dept$mx, n = 5, na.rm = T))
+      colorBin("Reds", seq(min(map.dept$mx, na.rm = TRUE), 
+                           max(map.dept$mx, na.rm = TRUE), 
+                           length.out = 5), pretty = TRUE, 
+               na.color = NA) #unique(quantile(map.dept$mx, n = 5, na.rm = T))
     } else if (lt.col() == "ex") {
-      colorBin("Blues", seq(min(map.dept$ex), max(map.dept$ex), length.out = 5), pretty = TRUE, na.color = NA) #unique(quantile(map.dept$ex, n = 5, na.rm = T))}
+      colorBin("Blues", seq(min(map.dept$ex, na.rm = TRUE), 
+                            max(map.dept$ex, na.rm = TRUE), 
+                            length.out = 5), pretty = TRUE, 
+               na.color = NA) #unique(quantile(map.dept$ex, n = 5, na.rm = T))}
     }
     
     
