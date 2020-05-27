@@ -1,6 +1,6 @@
 library(shiny)              # Base shiny
 library(shinydashboard)     # Dashboard version of shiny
-library(shinydashboardPlus) # Dashboard extras (mainly right sidebar)
+library(shinythemes)        # Pretty-up the UI design
 library(shinyWidgets)       # For cool buttons, sliders, checkboxes, etc.
 library(leaflet)            # For interactive maps
 library(DT)                 # For fancy interactive data table 
@@ -9,199 +9,540 @@ library(sf)                 # Reading and manipulating shapes
 library(htmltools)          # Custom HTML control
 library(RColorBrewer)       # Color palettes
 library(plotly)             # For interactive plots
-
+# library(grid)
+# library(gridExtra)          # For arranging content for output
+library(dplyr)              # For data management
 
 source("./global.R")
 
 
-header <- dashboardHeaderPlus(disable = FALSE,
-  title = "French Mortality Database", titleWidth = 400,
-  enable_rightsidebar = FALSE, rightSidebarIcon = "gears", 
-  left_menu = tagList(
-    dropdownBlock(
-      id = "additional_options",
-      title = "Réglages",
-      icon = icon("sliders"),
-      prettySwitch(
-        inputId = "colorscale_options",
-        label = "Activer l'échelle des couleurs thématique (décile)",
-        fill = TRUE,
-        bigger = TRUE,
-        status = "primary",
-        value = FALSE
-      )
-    )
-  )
-
-  #navbarPage(header=tags$head(tags$style(type='text/css', ".irs-grid-text { font-size: 20pt; }")))
-)
-
-body <- dashboardBody(
+ui <- navbarPage(title = "French Mortality Database",
+                 id = "nav", selected = "1", 
+                 theme = shinytheme("spacelab"),                       # Dashboard theme
   
-  chooseSliderSkin(skin = "Flat", color = "#3c8dbc"),   # awesomeSlider appearance
-  
-  fluidRow(
-    
-    # Some CSS styling options
-    tags$style(type = "text/css", "
-               .irs-grid-text {font-size: 13px; color: black;}
-               span.irs-single {font-size: 14px;}
-               span.irs-min {font-size: 14px;}
-               span.irs-max {font-size: 14px;}
-               span.irs-single {background-color: #3c8dbc;}
-               .bttn-unite.bttn-default {color: #3c8dbc; border-color: #3c8dbc;}
-               #map {height: calc(100vh - 80px) !important;}
-               span.label.label-danger {display: none !important;}
-               .modebar {display: none !important;}
-               .leaflet-popup-content-wrapper {background-color: rgba(255, 255, 255, 0.85)}
-               "),
-    
-    column(width = 6, 
-           box(width = NULL, solidHeader = TRUE,
-               withSpinner(leafletOutput("FMDB", height = 900), type = 6),
-               HTML(" <em> Source: French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
-               Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
-                    paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")),
-               style = "height: 100vh - 30vh;"
-               )
-          ),
-    
-    column(width = 3,
-           box(width = NULL, solidHeader = TRUE, 
-               h3(strong("Paris et les environs"), style = "color: #3c8dbc; text-align: center; margin-top: 0px"),
-               withSpinner(leafletOutput("FMDB.Paris", height = 380), type = 6),
-               style = "height: 43vh;"
+  tabPanel(title = "Carte", value = "1", icon = icon("map-marked-alt"),
+      
+           chooseSliderSkin(skin = "Nice", color = "#3c8dbc"),         # Slider style and appearance
+           
+           tags$style(type = "text/css", "
+                      
+                      /* Slider and button appearance */
+                          .irs-grid-text {
+                                          font-size: 14px; 
+                                          color: black; 
+                                          -webkit-transform: rotate(-45deg);
+                                          padding: 0 20px 0 0;
+                                         }
+                      
+                          span.irs-single {font-size: 14px; 
+                                           background-color: #3c8dbc;}
+                          
+                          span.irs-min {font-size: 14px;}
+                          span.irs-max {font-size: 14px;}
+
+/*.shiny-input-container[id='age'].span.irs-max {
+                                          color: transparent; 
+                                          font-size: 14px; 
+                                          background: 0;
+                                       }
+                          .shiny-input-container[id='age'].span.irs-max:after {
+                                                position: relative !important; 
+                                                content: '105+'; 
+                                                font-size: 14px; 
+                                                color: #999; 
+                                                background-color: rgba(0, 0, 0, 0.1);
+                                                padding: 1px 3px;
+                                                border-radius: 3px;
+                                                line-height: 1.333;
+                                                text-shadow: none;
+                                             }
+*/                        
+
+                          .form-group.shiny-input-container {margin-bottom: 30px;}
+                          
+                          .bttn-unite.bttn-default {color: #3c8dbc; border-color: #3c8dbc;}
+                          span.label.label-danger {display: none !important;}
+                          .modebar {display: none !important;}
+                      
+                      /* leaflet popups and other map settings */
+                          .leaflet-popup-content-wrapper {background-color: rgba(255, 255, 255, 0.85)}
+                          html, body {width: 100%; height: 100%}
+                      
+                      /* Setting for the maps to fill/scale to the window size */ 
+                          #FMDB {height: calc(100vh - 80px) !important;}
+                          #FMDBreport {height: 20vh;}
+
+                      /* Setting the navbar and containter-fluid padding to 0 for the map tab only */             
+                          .navbar {margin-bottom: 0;}
+                          .container-fluid:nth-child(2) {padding-left: 0; padding-right: 0;}
+                          .tab-pane:nth-of-type(2) {padding-left: 25px; padding-right: 25px;}
+                      
+                      /* Appearance of the controls box */
+                          #controls {  
+                                      background-color: white;
+                                      padding: 5px 20px 20px 20px;
+
+                                  /* Fade out while not hovering */
+                                      opacity: 0.70;
+                                      transition: opacity 250ms 0s;
+                                      overflow: auto;
+                                    }
+                          
+                          #controls:hover {
+                                        /* Fade in while hovering */
+                                            opacity: 1;
+                                            transition-delay: opacity 250ms 0s;
+                                            overflow: auto;
+                          }
+                        
+                      /* Top padding for the DOWNLOAD BUTTON 
+                          .tab-pane:nth-of-type(2), .row:nth-of-type(3) {margin-top: 15px;}
+                      */
+
+                      /* Data Table height */
+                          .dataTables_scrollBody {min-height: 30vh;}
+                      
+                      /* Data Table prevent row deselection (i.e. at least one row should be selected at any given time) */
+                          table.dataTable tbody tr.selected {pointer-events: none;}
+
+                      /* Data Table remove info row [Showing x of n entries] from the bottom and adding bottom margins to space elements */
+                          .dataTables_info {display: none;}
+                          .dataTables_scroll {margin-bottom: 20px;}
+
+                      "),
+           
+           tags$div(id = "cite",
+                    
+                    HTML(" <em> Source: French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
+                         Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
+                         paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")), 
+                    
+                    style = "position: absolute; bottom: 10px; left: 10px; font-size: 14px;" 
+                    
            ),
            
-           box(width = NULL, solidHeader = TRUE,
-               plotlyOutput("plotly_histogram", height = 380),
-               style = "height: 40vh;"
-           )
-    ),
+    withSpinner(proxy.height = "100vh - 80px",
+                leafletOutput("FMDB", width = "100%", height = 1000), 
+                type = 6),
+        
     
-    column(width = 3,
-           box(width = NULL, solidHeader = TRUE,
-               p(enc2utf8("Veuillez choisir l'indicateur, l'âge et le sexe, et cliquez sur 'Actualiser' pour rafraîchir la carte"), 
-                 style = "color: grey; font-size: 16px"),
-               awesomeRadio("lt.column", h4("Indicateur"),
-                            choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
-               awesomeRadio("sex", h4("Sexe"), choices = list("Hommes" = 1, "Femmes" = 2), inline = TRUE),
-               
-               sliderInput("age", h4("Âge"), min = 0, max = 110, value = 0, sep = "", step = 1),
-               sliderInput("year", h4("Année (période)"), min = min(years), max = max(years), value = max(years), sep = "", step = 1),
-               actionBttn("applyInput", "Actualiser", style = "unite", block = TRUE)
-              )
-           
-          ),
-    
-    column(width = 3, 
-           box(width = NULL, solidHeader = TRUE, DT::dataTableOutput("table.lt"), style = "height:400px;" #overflow-y: scroll;"
-           
-              )
-          )
+     absolutePanel(
+            id = "controls",
+            class = "panel panel-default", 
+            fixed = TRUE,
+            draggable = FALSE,
+            top = 60,
+            left = "auto",
+            right = 20,
+            bottom = "auto",
+            width = 500,
+            height = "auto",
+            
+            wellPanel(em(enc2utf8("Veuillez choisir l'indicateur, l'âge et le sexe, et cliquez sur 'Actualiser' pour rafraîchir la carte"), 
+              style = "color: grey50; font-size: 16px; justified: center;")),      
+            
+            awesomeRadio("lt.column", h4("Indicateur"),
+                         choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
+            awesomeRadio("sex", h4("Sexe"), choices = list("Hommes" = 1, "Femmes" = 2), inline = TRUE),
+            
+            sliderInput("age", h4("Âge"), min = 0, max = 105, value = 0, sep = "", step = 1, width = "100%" ),
+            sliderInput("year", h4("Année (période)"), min = min(years), max = max(years), value = max(years), sep = "", step = 1, width = "100%"),
+            actionBttn("applyInput", "Actualiser", style = "unite", block = TRUE)
+            
+            )
+  ),
 
-     )
- )
+  tabPanel(title = "Explorateur de données", value = "2", icon = icon("table"),
 
-
-
-
-ui <- dashboardPagePlus(
-                    skin = "blue",
-                    header = header,
-                    sidebar = dashboardSidebar(disable = TRUE, width = 0),
-                    # rightsidebar = rightSidebar(width = 400,
-                    #                             rightSidebarTabContent(
-                    #                               id = 1,
-                    #                               icon = "info",
-                    #                               active = TRUE
-                    #                             )
-                    #                ),
-                    sidebar_fullCollapse = TRUE,
-                    body = body
-      )
+       fluidRow(
+         column(width = 10,
+                wellPanel(em(enc2utf8("Veuillez cliquer sur une des lignes dans la table pour actualiser les graphiques et la carte. 
+                                      Pour changer l'indicateur ou les autres réglages revenez à l'onglet principal de la Carte et
+                                      effectuez votre sélection"), 
+                             style = "color: grey50; font-size: 16px; justified: left; border: none; margin-bottom: 0;"))
+         ),
+         
+         column(width = 2,
+                wellPanel(downloadButton("report", "Générer un rapport"), 
+                          style = "padding: 10px; background-color: transparent; -webkit-box-shadow: none; border: none; box-shadow: none;")
+         )
+       ),
+       
+       fluidRow(
+          
+         DT::dataTableOutput("tableLT", width = "100%", height = "100%")
+       
+       ), 
+       
+       fluidRow(
+         column(width = 3,
+                plotlyOutput("plotly_histogram", width = "100%", height = "100%")
+         ),
+         
+         column(width = 5, 
+                plotlyOutput("plotly_graph", width = "100%", height = "100%")
+         ),
+         
+         column(width = 4,
+                leafletOutput("FMDBreport", width = "100%", height = 450) 
+         )
+       )#,
+       
+       #fluidRow(
+         
+         
+         
+       #)
+         
+  )
+) 
 
 
 
 server <- function(input, output, session) {
   
-  # Set up state-level life table data to be called based on user input
+  # # Initializing empty element containers for the report card
+  # report.elements <- reactiveValues(FMDB = NULL,
+  #                                   tableLT = NULL,
+  #                                   FMDBreport = NULL,
+  #                                   plotly_histogram = NULL,
+  #                                   plotly_graph = NULL)
+  # 
+  
+  # This section ensures that changes are not applied to any indicators UNTIL the Apply Changes button is clicked!!!
+  lt.col <- eventReactive(input$applyInput, {input$lt.column}, ignoreNULL = FALSE)
+  age <- eventReactive(input$applyInput, {input$age}, ignoreNULL = FALSE)
+  sex <- eventReactive(input$applyInput, {input$sex}, ignoreNULL = FALSE)
+  year <- eventReactive(input$applyInput, {input$year}, ignoreNULL = FALSE)
+  
+  
+  # Set up department-level life table data to be called based on user input
   spdf.data <- reactive({
     
     input$applyInput # Asserting dependency on pressing of the Apply Changes button
     
     sex.vec <- c("MLT.", "FLT.")
-    df <- get(paste0(sex.vec[isolate(as.numeric(input$sex))], isolate(input$year)))
-    df1 <- df[df$Age == isolate(as.character(input$age)), ]
-    df2 <- merge(if (isolate(input$year) < 1968) {dept.before.1968.shp} else {dept.after.1968.shp}, df1, by.x = "code_dept", by.y = "PopName")
+    df <- get(paste0(sex.vec[isolate(as.numeric(sex()))], isolate(year())))
+    df1 <- df[df$Age == isolate(as.character(age())), ]
+    df2 <- merge(if (isolate(year()) < 1968) {dept.before.1968.shp} else {dept.after.1968.shp}, df1, by.x = "code_dept", by.y = "PopName")
+    df3 <- df2[order(df2$nom_dept),] # This is necessary to maintain concordance with the DataTable order of rows
+    rownames(df3) <- 1:nrow(df3)     # and this helps to match the rows though user selection to the correct shape
     
-    names(st_geometry(df2)) <- NULL # Trivial, but necessary setup to avoid sf shapefile bug. See here for more details:
+    names(st_geometry(df3)) <- NULL # Trivial, but necessary setup to avoid sf shapefile bug. See here for more details:
     ## https://stackoverflow.com/questions/53227205/polygons-not-getting-plotted-in-leaflet-r-map-since-update
-    return(df2)
+    return(df3)
+  })
+  
+  
+  # Data for graph plotting and comparison (not linked to leaflet)
+  scatter.data <- reactive({
+
+    input$applyInput # Asserting dependency on pressing of the Apply Changes button
+
+    sex.vec <- c("MLT", "FLT")
+    df <- get(sex.vec[isolate(as.numeric(sex()))])
+    df1 <- df[df$Age == isolate(as.character(age())), ]
+    df2 <- merge(if (isolate(year()) < 1968) {
+                     dept.before.1968.shp[, c("code_dept", "nom_dept")]
+                 } else {
+                     dept.after.1968.shp[, c("code_dept", "nom_dept")]
+                 }, 
+                 df1, 
+                 by.x = "code_dept",
+                 by.y = "PopName")
+    st_geometry(df2) <- NULL                                   # <---- Must be set to null, otherwise not treated like data.frame in some instances
+    df3 <- df2[order(as.numeric(df2$code_dept), df2$Year), ]   # This is necessary to maintain concordance with the DataTable order of rows
+                                                               # and this helps to match the rows though user selection to the correct shape
+    return(df3) 
   })
   
 
   # Showing life table
-  output$table.lt <- DT::renderDataTable({
+  output$tableLT <- DT::renderDataTable({
     
     input$applyInput      # Asserting dependency on pressing of the Apply Changes button
     
     table.data <- st_set_geometry(spdf.data(), NULL) # Getting rid of the geometry column of sf to be able to extract tabular data
     
     datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "Age", "mx", "ex")], 
-              rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à (x) an(s)"),
-              class = "cell-border compact hover", 
-              caption = htmltools::tags$caption(paste0("Table de mortalité départementale pour les ", 
-                                                       ifelse(isolate(input$sex) == "1", "hommes",
-                                                                            ifelse(isolate(input$sex) == "2", "femmes", stopApp())),
-                                                       ifelse(isolate(input$sex) == 1, " agés ", " agées "), isolate(input$age), " en ", isolate(input$year)), 
-                                                style = "color: #3c8dbc; font-size:18px; text-align: center; margin-top: 0px; font-weight: 700"), 
-              options = list(searching = FALSE, paging = FALSE, scrollY = "200px")
-    )
+              
+                  rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à (x) an(s)"),
+              
+                  class = "cell-border compact hover", 
+              
+                  caption = htmltools::tags$caption(paste0("Table de mortalité départementale pour les ", 
+                                                           ifelse(isolate(sex()) == "1", "hommes",
+                                                                                ifelse(isolate(sex()) == "2", "femmes", stopApp())),
+                                                           ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " en ", isolate(year())), 
+                                                    style = "color: #3c8dbc; font-size:24px; text-align: center; margin-top: 0px; font-weight: 700"), 
+                  options = list(searching = FALSE,
+                                 paging = FALSE, 
+                                 scrollY = "200px",
+                                 list(order = list(0, 'desc'))
+                            ), 
+              
+                  selection = list(mode = "single", selected = 1)
+             )
+    
   })  
   
   
   # Plotly histogram
   output$plotly_histogram <- renderPlotly({
-    
-    lt.col <- reactive({isolate(input$lt.column)})
-    
-    map.dept <- if (lt.col() == "mx") {
+
+    #lt.col <- reactive({isolate(input$lt.column)})
+
+    plot.dept <- if (lt.col() == "mx") {
                     spdf.data()$mx
                   } else if (lt.col() == "ex") {
                     spdf.data()$ex
                   }
-    
+
     labs.x <- if (lt.col() == "mx") {
-                "Taux de mortalité (pour 1000 habitants)"
+                paste0("Taux de mortalité pour 1000 habitants")
+                       
+                       # , \n(", isolate(ifelse(sex() == "1", "hommes",
+                       #                                                            ifelse(sex() == "2", "femmes", NA))),
+                       # ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " ans)")
               } else if (lt.col() == "ex") {
-                "Espérance de vie (ans)"
+                paste0("Espérance de vie (ans)")
+
+                      # , (", isolate(ifelse(sex() == "1", "hommes",
+                      #                                            ifelse(sex() == "2", "femmes", NA))),
+                      #  ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " ans)")
               }
-    
+
     layout(
-      
+
       plot_ly(
-              x = map.dept,
+              x = plot.dept,
               autobinx = TRUE,
-              xbins = list(start = min(map.dept), end = max(map.dept), size = 0.25),
+              #xbins = list(start = min(map.dept), end = max(map.dept), size = 0.25),
               alpha = 0.6,
               type = "histogram",
               histnorm = "percent"
       ),
-           #title = "Nombre de départements",
-           xaxis = list(title = labs.x, 
-                        zeroline = FALSE, 
-                        dtick = 1, 
-                        tick0 = 0, 
-                        tickmode = "linear", 
-                        range = c(min(map.dept), max(map.dept))
+           title = paste0("Les départements en ", isolate(year())),
+           xaxis = list(title = labs.x,
+                        zeroline = FALSE,
+                        automargin = TRUE,
+                        #dtick = 1,
+                        #tick0 = 0,
+                        tickmode = "linear",
+                        range = c(min(plot.dept), max(plot.dept)),
+                        fixedrange = TRUE,
+                        showticklabels = TRUE, 
+                        tickcolor = 'rgb(127,127,127)',
+                        ticks = 'outside'
                     ),
-      
-      
-           yaxis = list(title = "%", zeroline = FALSE),
+
+           yaxis = list(title = "%", 
+                        zeroline = FALSE,
+                        fixedrange = TRUE,
+                        showticklabels = TRUE, 
+                        tickcolor = 'rgb(127,127,127)', 
+                        ticks = 'outside'
+                    ),
            bargap = 0.05
+    )
+
+  })
+  
+  
+  
+  # Setup the process to record the current and last clicks of the DataTable
+  clickDT <- reactiveValues(current.click = 1, last.click = NULL)
+  
+  observeEvent(input$tableLT_row_last_clicked, {
+    clickDT$last.click <- clickDT$current.click
+    clickDT$current.click <- input$tableLT_row_last_clicked
+  })
+  
+  current.clickDT <- reactive({
+    req(input$tableLT_rows_selected) #req(input$tableLT_row_last_clicked)
+    input$tableLT_rows_selected #input$tableLT_row_last_clicked
+    clickDT$current.click
+  })
+  
+  last.clickDT <- reactive({
+    req(input$tableLT_row_last_clicked)
+    input$tableLT_row_last_clicked
+    clickDT$last.click
+  })
+  
+
+  # Data for plotly line graph
+  plot.df <- reactive({
+                  
+                  #lt.col <- eventReactive({input$applyInput; "mx"} , {input$lt.column})
+                  {input$tableLT_rows_selected}
+                  
+                  input$applyInput
+                  
+                  plot.data <- scatter.data() %>%
+                    group_by(Year) %>% 
+                    mutate(Min = if (lt.col() == "mx") {min(mx, na.rm = T)} else {min(ex, na.rm = T)},
+                           Pctile25 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[2])} else {unname(quantile(ex, na.rm = T)[2])},
+                           Pctile75 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[4])} else {unname(quantile(ex, na.rm = T)[4])},
+                           Max = if (lt.col() == "mx") {max(mx, na.rm = T)} else {max(ex, na.rm = T)}) %>%
+                    summarise(Min = mean(Min),
+                              Pctile25 = mean(Pctile25),
+                              Pctile75 = mean(Pctile75),
+                              Max = mean(Max))
+                  
+                  sex.vec <- c("MLT", "FLT")
+                  plot.data.france <- get(sex.vec[isolate(as.numeric(sex()))]) %>% 
+                    filter(PopName == "98", Age == isolate(as.character(age()))) %>% 
+                    select(Year, lt.col()) %>%
+                    rename_at(2, ~"France")
+                  
+                  #if (!is.null(current.clickDT())) {
+                            plot.data.dept <- scatter.data() %>%
+                              filter(code_dept == if_else(isolate(as.numeric(year())) >= 1968, 
+                                                          match.sel.row.dept.after.1968[current.clickDT(), "code_dept"],
+                                                          match.sel.row.dept.before.1968[current.clickDT(), "code_dept"])
+                              ) %>% 
+                              select(Year, nom_dept, lt.col()) %>% 
+                              rename_at(3, ~"value")
+                            
+                            plot.data.join <- plot.data %>% 
+                              left_join(plot.data.france, by = "Year") %>% 
+                              left_join(plot.data.dept, by = "Year") %>% 
+                              select(Year, Min, Pctile25, Pctile75, Max, France, nom_dept, value)
+                  
+                  # } else {
+                  #   
+                  #           plot.data.join <- plot.data %>% 
+                  #             left_join(plot.data.france, by = "Year") %>% 
+                  #             select(Year, Min, Pctile25, Pctile75, Max, France)
+                  # }
+                  
+                  return(plot.data.join)                
+  
+  })
+  
+  
+  # Plotly graph
+  output$plotly_graph <- renderPlotly({
+    
+    #lt.col <- reactive({isolate(input$lt.column)})
+    
+    plot.data <- plot.df()
+    
+    # plot.data <- scatter.data() %>%
+    #   #filter(code_dept != "98") %>% 
+    #   #select(Year, mx, ex) %>% 
+    #   group_by(Year) %>% 
+    #   mutate(Min = if (lt.col() == "mx") {min(mx, na.rm = T)} else {min(ex, na.rm = T)},
+    #          Pctile25 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[2])} else {unname(quantile(ex, na.rm = T)[2])},
+    #          Pctile75 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[4])} else {unname(quantile(ex, na.rm = T)[4])},
+    #          Max = if (lt.col() == "mx") {max(mx, na.rm = T)} else {max(ex, na.rm = T)}) %>%
+    #   summarise(Min = mean(Min),
+    #             Pctile25 = mean(Pctile25),
+    #             Pctile75 = mean(Pctile75),
+    #             Max = mean(Max))
+    # 
+    # sex.vec <- c("MLT", "FLT")
+    # plot.data.france <- get(sex.vec[isolate(as.numeric(sex()))]) %>% 
+    #        filter(PopName == "98", Age == isolate(as.character(age()))) %>% 
+    #        select(Year, lt.col()) %>%
+    #        rename_at(2, ~"France")
+    #   
+    #   
+    # plot.data.join <- plot.data %>% 
+    #   left_join(plot.data.france, by = "Year") %>% 
+    #   select(Year, Min, Pctile25, Pctile75, Max, France) %>% 
+    #   melt(id.vars = "Year", variable.name = "Group", factorsAsStrings = FALSE)
       
-      
+    #plot.data.join$Group <- factor(plot.data.join$Group, levels = c("Min", "Pctile25", "Pctile75", "Max", "France"), ordered = TRUE)
+    
+    labs.y <- if (lt.col() == "mx") {
+      "Taux de mortalité (pour 1000 habitants)"
+    } else if (lt.col() == "ex") {
+      "Espérance de vie (ans)"
+    }
+    
+  layout(
+    
+    
+    plot.data %>%
+      #group_by(Year) %>%
+      plot_ly(x = ~Year,
+              y = ~Min,
+              type = 'scatter',
+              mode = 'lines',
+              line = list(color = 'rgba(150,175,255,0)'),
+              showlegend = F,
+              name = 'Minimum',
+              hoverinfo = "x+y",                            # Only shows x and y values on hover
+              hoverlabel = list(bgcolor = "rgba(150,175,255,0.4)")) %>% 
+      add_trace(y = ~Max,
+                type = 'scatter',
+                mode = 'lines',
+                fill = 'tonexty',
+                fillcolor = 'rgba(150,175,255,0.4)',
+                line = list(color = 'rgba(150,175,255,0)'),
+                showlegend = T, 
+                name = 'Min-Max',                            # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
+                hoverinfo = "x+y",                           # Only shows x and y values on hover
+                hoverlabel = list(bgcolor = 'rgba(150,175,255,0.4)')) %>%                        
+      add_trace(y = ~Pctile25,
+                type = 'scatter',
+                mode = 'lines',
+                line = list(color = 'rgba(90,190,255,0)'),
+                showlegend = F, 
+                name = '25e centile',
+                hoverinfo = "x+y",                           # Only shows x and y values on hover
+                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)')) %>% 
+      add_trace(y = ~Pctile75,
+                type = 'scatter',
+                mode = 'lines',
+                fill = 'tonexty',
+                fillcolor = 'rgba(90,190,255,0.4)',
+                line = list(color = 'rgba(90,190,255,0))'),
+                showlegend = T, 
+                name = 'IQR',                                # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
+                hoverinfo = "x+y",                           # Only shows x and y values on hover
+                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)')) %>% 
+      add_trace(y = ~France,
+                type = 'scatter',
+                mode = 'lines',
+                line = list(color = 'rgba(120,120,255,1)'),
+                showlegend = T, 
+                name = 'FRANCE',
+                hoverinfo = "x+y+name",                      # Shows x, y, and name values on hover
+                hoverlabel = list(bgcolor = 'rgba(120,120,255,0.8)')) %>% 
+      add_trace(y = ~value,
+                type = 'scatter',
+                mode = 'lines',
+                line = list(color = 'rgba(255,0,0,0.7)'),
+                showlegend = T,
+                name = ~nom_dept,
+                hoverinfo = "x+y+name",                      # Shows x, y, and name values on hover
+                hoverlabel = list(bgcolor = 'rgba(255,0,0,0.6)')),
+    
+    # plot.data %>% 
+    #   group_by(Group) %>% 
+    #   plot_ly(x = ~Year,
+    #           y = ~value,
+    #           type = "scatter", 
+    #           mode = "lines",
+    #           color = ~Group,
+    #           name = rep(c("Minimum", "25ème centile", "75ème centile", "Maximum", "France"), each = length(unique(plot.data.join$Year))),
+    #           hoverinfo = "text",
+    #           hovertext = rep(c("Minimum", "25ème centile", "75ème centile", "Maximum", "France"), each = length(unique(plot.data.join$Year)))
+    #   ),
+    
+      plot_bgcolor = 'rgb(229,229,229)',
+      title = "La série chronologique dans une perspective comparative",
+      xaxis = list(title = "Année", zeroline = FALSE, fixedrange = FALSE, 
+                   gridcolor = 'rgb(255,255,255)', showticklabels = TRUE, tickcolor = 'rgb(127,127,127)', ticks = 'outside',
+                   showspikes = TRUE, spikemode = "toaxis+marker", spikethickness = 2, spikedash = "solid"),
+      yaxis = list(title = labs.y, zeroline = FALSE, fixedrange = FALSE, 
+                   gridcolor = 'rgb(255,255,255)', showticklabels = TRUE, tickcolor = 'rgb(127,127,127)', ticks = 'outside',
+                   showspikes = TRUE, spikemode = "toaxis+marker", spikethickness = 2, spikedash = "solid"),
+      legend = list(x = 0.75, y = 0.975, bgcolor = 'rgba(255,255,255,0.35', xanchor = "right", orientation = "h")
+
     )
     
   })
@@ -212,17 +553,32 @@ server <- function(input, output, session) {
   
     input$applyInput  # Asserting dependency on pressing of the Apply Changes button
     
-    lt.col <- reactive({isolate(input$lt.column)})
+    #lt.col <- reactive({isolate(input$lt.column)})
     
     map.dept <- spdf.data()
     
     # Creating quantile breakdown of mx or ex
+    
     quantColor <- if (lt.col() == "mx") {
-                    unique(quantile(map.dept$mx, n = 5, na.rm = T))
-                  } else if (lt.col() == "ex") {
-                    unique(quantile(map.dept$ex, n = 5, na.rm = T))}
+      colorBin("Reds", seq(min(map.dept$mx), max(map.dept$mx), length.out = 5), pretty = TRUE, na.color = NA) #unique(quantile(map.dept$mx, n = 5, na.rm = T))
+    } else if (lt.col() == "ex") {
+      colorBin("Blues", seq(min(map.dept$ex), max(map.dept$ex), length.out = 5), pretty = TRUE, na.color = NA) #unique(quantile(map.dept$ex, n = 5, na.rm = T))}
+    }
+    
+    
+    ## THIS WORKS BUT DOESN"T BREAK CLEANLY
+    # quantColor <- if (lt.col() == "mx") {
+    #   colorQuantile("Reds", seq(min(map.dept$mx), max(map.dept$mx), length.out = 5), n = 5, na.color = NA) #unique(quantile(map.dept$mx, n = 5, na.rm = T))
+    #               } else if (lt.col() == "ex") {
+    #   colorQuantile("Blues", seq(min(map.dept$ex), max(map.dept$ex), length.out = 5), n = 5, na.color = NA) #unique(quantile(map.dept$ex, n = 5, na.rm = T))}
+    #               }
+    
+    # quantColor <- if (lt.col() == "mx") {
+    #   colorQuantile("Reds", map.dept$mx, na.color = "transparent")}
+    # else if (lt.col() == "ex") {
+    #   colorQuantile("Blues", map.dept$ex, na.color = "transparent")}
                   
-    map1 <- leaflet(options = opts) %>%
+    map1 <- leaflet(options = opts, sizingPolicy = leafletSizingPolicy(browser.fill = TRUE)) %>%
       
       addMapPane("background", zIndex = 410) %>% 
       addMapPane("polygons", zIndex = 420) %>% 
@@ -231,38 +587,42 @@ server <- function(input, output, session) {
       addProviderTiles("CartoDB.PositronNoLabels", options = pathOptions(pane = "background")) %>%
       addProviderTiles("Stamen.TonerLabels", options = pathOptions(pane = "maplabels", opacity = 0.4)) %>%
       
-      #setView(lat = 46.70, lng = 3.30, zoom = 6) %>%                       
-      
       addPolygons(data = map.dept,
                   options = pathOptions(pane = "polygons"),
                   color = "white",
                   weight = 2,
                   opacity = 0.5,
-                  fillColor = brewer.pal(n = length(quantColor), if (lt.col() == "mx") {"Reds"} 
-                                                                 else if (lt.col() == "ex") {"Blues"}),
+                  fillColor = ~quantColor(if (lt.col() == "mx") {mx} else if (lt.col() == "ex") {ex}),
+                                            #brewer.pal(n = length(quantColor), if (lt.col() == "mx") {"Reds"} 
+                                            #                     else if (lt.col() == "ex") {"Blues"}),
+                                            
                   fillOpacity = 0.65,
-                  popup = paste0("<b>", map.dept$nom_dept, " (", isolate(input$year), ", ", 
-                                 isolate(ifelse(input$sex == "1", "hommes",
-                                                ifelse(input$sex == "2", "femmes", NA))), ", chiffres arrondis)", "</b>",
+                  popup = paste0("<b>", map.dept$nom_dept, " (", isolate(year()), ", ", 
+                                 isolate(ifelse(sex() == "1", "hommes",
+                                                ifelse(sex() == "2", "femmes", NA))), ", chiffres arrondis)", "</b>",
                                  "<br>", "Nombre de décès à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " pour 1000 habitants = ",  round(map.dept$mx, 2),
                                  "<br>", "L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " = ", round(map.dept$ex, 2), " ans"),
                   popupOptions = popupOptions(autoPan = FALSE, keepInView = TRUE, alpha = 0.5), 
-                  highlightOptions = highlightOptions(fillColor = "cyan", fillOpacity = 0.6, weight = 2)) %>%
+                  highlightOptions = highlightOptions(fillColor = "gold", fillOpacity = 0.6, weight = 2),
+                  layerId = ~code_dept) %>%
       
-      addLegend(pal = colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, 
-                                    seq(min(quantColor, na.rm = T), max(quantColor, na.rm = T), 
-                                        (max(quantColor, na.rm = T) - min(quantColor, na.rm = T))/5), 
-                                    n = 5),
-                values = round(seq(min(quantColor), max(quantColor), (max(quantColor) - min(quantColor))/5), 2),
+      addLegend(pal = quantColor,
+                      values = if (lt.col() == "mx") {map.dept$mx} else if (lt.col() == "ex") {map.dept$ex},
+                  
+                #   colorQuantile(if (lt.col() == "mx") {"Reds"} else if (lt.col() == "ex") {"Blues"}, 
+                #                     seq(min(quantColor, na.rm = T), max(quantColor, na.rm = T), 
+                #                         (max(quantColor, na.rm = T) - min(quantColor, na.rm = T))/5), 
+                #                     n = 5),
+                # values = round(seq(min(quantColor), max(quantColor), (max(quantColor) - min(quantColor))/5), 2),
                 title = paste0(isolate(ifelse(input$lt.column == "mx", paste0("Nombre de décès à ", map.dept$Age[1], 
                                                                               if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                                                               " pour 1000 habitants "),
                                               paste0("L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"}))),
-                               "<br>", "(", isolate(input$year), ", ",
-                               isolate(ifelse(input$sex == "1", "hommes",
-                                              ifelse(input$sex == "2", "femmes", stopApp()))), "):"),
+                               "<br>", "(", isolate(year()), ", ",
+                               isolate(ifelse(sex() == "1", "hommes",
+                                              ifelse(sex() == "2", "femmes", stopApp()))), "):"),
                 position = "bottomleft",
                 opacity = 1,
                 labFormat = function(type, cuts, p) {
@@ -280,30 +640,125 @@ server <- function(input, output, session) {
     
     make_leaflet_map(opts = leafletOptions()) %>% 
       
-      setView(lat = 46.70, lng = 2.4, zoom = 6) %>% 
+      #setView(lat = 46.70, lng = 2.4, zoom = 6) %>% 
+      clearBounds() %>% 
       
-    addMiniMap(
-      tiles = providers$CartoDB.Positron,
-      position = 'topright',
-      width = 175, height = 175,
-      toggleDisplay = FALSE,
-      aimingRectOptions = list(color = 'orange')
+      addMiniMap(
+        tiles = providers$CartoDB.Positron,
+        position = 'topleft',
+        width = 175, height = 175,
+        toggleDisplay = FALSE,
+        aimingRectOptions = list(color = 'orange'),
+        autoToggleDisplay = TRUE
     )
+
+  })
+  
+  
+  # Rendering the map for the report tab
+  output$FMDBreport <- renderLeaflet({
+
+    make_leaflet_map(opts = leafletOptions(dragging = TRUE, zoomControl = FALSE)) %>%
+      #setView(lat = 46.7, lng = 2.4, zoom = 5) %>%
+      clearBounds() %>% 
+      clearControls()
     
   })
   
-  # Rendering the Paris close-up map
-  output$FMDB.Paris <- renderLeaflet({
-    
-    make_leaflet_map(opts = leafletOptions(dragging = FALSE, zoomControl = FALSE, minZoom = 9, maxZoom = 9)) %>% 
-      setView(lat = 48.85, lng = 2.36, zoom = 9) %>% 
-      clearControls()
-    
-  }) 
   
-  # ### WIP ()
-  # # Updating the polygons upon options selection without reloading the basemap
+  
+  # Observer for proxies
+  observe({  
+    
+    #lt.col <- reactive({isolate(input$lt.column)})
+    map.dept <- spdf.data()
+ 
+    if (is.null(current.clickDT())) {
+      
+      return()
+      
+    } else if (!is.null(current.clickDT())) {
+      
+      # lng.hlight <- st_coordinates(map.dept[current.clickDT(),])[,1]
+      # lat.hlight <- st_coordinates(map.dept[current.clickDT(),])[,2]
+      
+      leafletProxy("FMDBreport") %>%        
+        
+        # addPolygons(lng = lng.hlight,
+        #             lat = lat.hlight,
+        #             fillColor = "transparent",
+        #             fillOpacity = 0,
+        #             color = "gold",
+        #             weight = 3,
+        #             stroke = TRUE,
+        #             layerId = "Selected"
+        # ) %>% 
+        
+        flyToBounds(lng1 = unname(st_bbox(map.dept[current.clickDT(),])[1]),
+                    lng2 = unname(st_bbox(map.dept[current.clickDT(),])[3]),
+                    lat1 = unname(st_bbox(map.dept[current.clickDT(),])[2]),
+                    lat2 = unname(st_bbox(map.dept[current.clickDT(),])[4])
+        )
+        # ) %>% 
+        # #removeShape(layerId = "Selected") %>% 
 
+
+      
+      # print(paste0("Current dept.id: ", dept.id[current.clickDT()]))
+      # print(paste0("Last click: ", last.clickDT()))
+      # print(head(plot.df()))
+      
+      
+    }
+    
+  })
+  
+  
+  # # Create a PDF to export
+  # output$report = downloadHandler(
+  #   filename = function() {"FMDB_report.pdf"},
+  #   content = function(file) {
+  #     pdf(file, onefile = TRUE)
+  #     grid.arrange(grobs = lapply(list(report.elements$FMDB,
+  #                                      report.elements$tableLT,
+  #                                      report.elements$plotly_histogram,
+  #                                      report.elements$plotly_graph,
+  #                                      report.elements$FMDBreport), 
+  #                                 grobTree), 
+  #                  ncol = 2) 
+  #     dev.off()
+  #   }
+  # )
+  
+  
+  # WIP : Hold off for the time being
+  #
+  # # Make and download the report card
+  # output$report <- downloadHandler(
+  #   
+  #   filename = "report.pdf",
+  #   
+  #   content = function(file) {
+  #     
+  #     # Copy the report file to a temporary directory before processing it, in
+  #     # case we don't have write permissions to the current working dir (which
+  #     # can happen when deployed).
+  #     tempReport <- file.path(tempdir(), "report.Rmd")
+  #     file.copy("report.Rmd", tempReport, overwrite = TRUE)
+  #     
+  #     # Set up parameters to pass to Rmd document
+  #     params <- list(n = input$slider)
+  #     
+  #     # Knit the document, passing in the `params` list, and eval it in a
+  #     # child of the global environment (this isolates the code in the document
+  #     # from the code in this app).
+  #     rmarkdown::render(tempReport, output_file = file,
+  #                       params = params,
+  #                       envir = new.env(parent = globalenv())
+  #     )
+  # })
+  
+  
 }
 
 shinyApp(ui = ui, server = server)
