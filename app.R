@@ -113,10 +113,9 @@ ui <- navbarPage(title = "French Mortality Database",
            
            tags$div(id = "cite",
                     
-                    HTML(" <em> Source: French Mortality Database</em>. University of California, Berkeley (USA), INED (Paris, France). 
+                    HTML("Source: French Regional Database. Paris School of Economics (France), Ecole Normale Supérieure Paris-Saclay (France), University of California, Berkeley (USA), INED (France). 
                          Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
-                         paste0(". Les données ont été affichées à ", as.POSIXct(Sys.time()), ".")), 
-                    
+                                             
                     style = "position: absolute; bottom: 10px; left: 10px; font-size: 14px;" 
                     
            ),
@@ -138,7 +137,7 @@ ui <- navbarPage(title = "French Mortality Database",
             width = 500,
             height = "auto",
             
-            wellPanel(em(enc2utf8("Veuillez choisir l'indicateur, l'âge et le sexe, et cliquez sur 'Actualiser' pour rafraîchir la carte"), 
+            wellPanel(em(enc2utf8("Veuillez choisir l'indicateur, l'âge et le sexe, puis cliquer sur 'Actualiser' pour rafraîchir la carte"), 
               style = "color: grey50; font-size: 16px; justified: center;")),      
             
             awesomeRadio("lt.column", h4("Indicateur"),
@@ -156,8 +155,8 @@ ui <- navbarPage(title = "French Mortality Database",
 
        fluidRow(
          column(width = 10,
-                wellPanel(em(enc2utf8("Veuillez cliquer sur une des lignes dans la table pour actualiser les graphiques et la carte. 
-                                      Pour changer l'indicateur ou les autres réglages revenez à l'onglet principal de la Carte et
+                wellPanel(em(enc2utf8("Veuillez cliquer sur une des lignes du tableau pour actualiser les graphiques et la carte. 
+                                      Pour changer l'indicateur ou les autres réglages, revenez à l'onglet principal de la carte et
                                       effectuez votre sélection"), 
                              style = "color: grey50; font-size: 16px; justified: left; border: none; margin-bottom: 0;"))
          ),
@@ -266,14 +265,13 @@ server <- function(input, output, session) {
     
     datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "Age", "mx", "ex")], 
               
-                  rownames = FALSE, colnames = c("Département", "Âge (x)", "Décès pour 1000 habitants", "L'espérance de vie à (x) an(s)"),
+                  rownames = FALSE, colnames = c("Département", "Âge", "Taux de mortalité pour 1000 habitants", "Espérance de vie à (x) an(s)"),
               
                   class = "cell-border compact hover", 
               
-                  caption = htmltools::tags$caption(paste0("Table de mortalité départementale pour les ", 
-                                                           ifelse(isolate(sex()) == "1", "hommes",
-                                                                                ifelse(isolate(sex()) == "2", "femmes", stopApp())),
-                                                           ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " en ", isolate(year())), 
+                  caption = htmltools::tags$caption(paste0("Tables de mortalité départementales pour l'année" isolate(year())," (", 
+       ifelse(isolate(sex()) == "1", "hommes",
+              ifelse(isolate(sex()) == "2", "femmes", stopApp())),")",) 
                                                     style = "color: #3c8dbc; font-size:24px; text-align: center; margin-top: 0px; font-weight: 700"), 
                   options = list(searching = FALSE,
                                  paging = FALSE, 
@@ -299,13 +297,13 @@ server <- function(input, output, session) {
                   }
 
     labs.x <- if (lt.col() == "mx") {
-                paste0("Taux de mortalité pour 1000 habitants")
+                paste0("Taux de mortalité pour 1000 habitants (mx)")
                        
                        # , \n(", isolate(ifelse(sex() == "1", "hommes",
                        #                                                            ifelse(sex() == "2", "femmes", NA))),
                        # ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " ans)")
               } else if (lt.col() == "ex") {
-                paste0("Espérance de vie (ans)")
+                paste0("Espérance de vie (ex)")
 
                       # , (", isolate(ifelse(sex() == "1", "hommes",
                       #                                            ifelse(sex() == "2", "femmes", NA))),
@@ -322,7 +320,7 @@ server <- function(input, output, session) {
               type = "histogram",
               histnorm = "percent"
       ),
-           title = paste0("Les départements en ", isolate(year())),
+           title = paste0("Histogramme des valeurs en ", isolate(year())),
            xaxis = list(title = labs.x,
                         zeroline = FALSE,
                         automargin = TRUE,
@@ -457,9 +455,9 @@ server <- function(input, output, session) {
     #plot.data.join$Group <- factor(plot.data.join$Group, levels = c("Min", "Pctile25", "Pctile75", "Max", "France"), ordered = TRUE)
     
     labs.y <- if (lt.col() == "mx") {
-      "Taux de mortalité (pour 1000 habitants)"
+      "Taux de mortalité (mx)"
     } else if (lt.col() == "ex") {
-      "Espérance de vie (ans)"
+      "Espérance de vie (ex)"
     }
     
   layout(
@@ -501,7 +499,7 @@ server <- function(input, output, session) {
                 fillcolor = 'rgba(90,190,255,0.4)',
                 line = list(color = 'rgba(90,190,255,0))'),
                 showlegend = T, 
-                name = 'IQR',                                # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
+                name = 'Intervalle inter-quartile',                                # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
                 hoverinfo = "x+y",                           # Only shows x and y values on hover
                 hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)')) %>% 
       add_trace(y = ~France,
@@ -534,7 +532,7 @@ server <- function(input, output, session) {
     #   ),
     
       plot_bgcolor = 'rgb(229,229,229)',
-      title = "La série chronologique dans une perspective comparative",
+      title = "Séries chronologiques",
       xaxis = list(title = "Année", zeroline = FALSE, fixedrange = FALSE, 
                    gridcolor = 'rgb(255,255,255)', showticklabels = TRUE, tickcolor = 'rgb(127,127,127)', ticks = 'outside',
                    showspikes = TRUE, spikemode = "toaxis+marker", spikethickness = 2, spikedash = "solid"),
