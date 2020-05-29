@@ -9,8 +9,6 @@ library(sf)                 # Reading and manipulating shapes
 library(htmltools)          # Custom HTML control
 library(RColorBrewer)       # Color palettes
 library(plotly)             # For interactive plots
-# library(grid)
-# library(gridExtra)          # For arranging content for output
 library(dplyr)              # For data management
 
 source("./global.R")
@@ -114,7 +112,7 @@ ui <- navbarPage(title = "French Mortality Database",
            tags$div(id = "cite",
                     
                     HTML("Source: French Regional Database. Paris School of Economics (France), Ecole Normale Supérieure Paris-Saclay (France), University of California, Berkeley (USA), INED (France). 
-                         Disponible sur <a href='https://mortality.org'>mortality.org</a>", 
+                         Disponible sur <a href='https://mortality.org'>mortality.org</a>"), 
                                              
                     style = "position: absolute; bottom: 10px; left: 10px; font-size: 14px;" 
                     
@@ -144,11 +142,11 @@ ui <- navbarPage(title = "French Mortality Database",
                          choices = list("Taux de mortalité" = "mx", "Espérance de vie" = "ex"), selected = "mx", inline = TRUE),
             awesomeRadio("sex", h4("Sexe"), choices = list("Hommes" = 1, "Femmes" = 2), inline = TRUE),
             
-            sliderInput("age", h4("Âge"), min = 0, max = 105, value = 0, sep = "", step = 1, width = "100%" ),
+            sliderInput("age", h4("Âge"), min = 0, max = 105, value = 0, sep = "", step = 1, width = "100%"),
             sliderInput("year", h4("Année (période)"), min = min(years), max = max(years), value = max(years), sep = "", step = 1, width = "100%"),
             actionBttn("applyInput", "Actualiser", style = "unite", block = TRUE)
             
-            )
+     )
   ),
 
   tabPanel(title = "Explorateur de données", value = "2", icon = icon("table"),
@@ -185,28 +183,13 @@ ui <- navbarPage(title = "French Mortality Database",
          column(width = 4,
                 leafletOutput("FMDBreport", width = "100%", height = 450) 
          )
-       )#,
-       
-       #fluidRow(
-         
-         
-         
-       #)
-         
+       )
   )
 ) 
 
 
 
 server <- function(input, output, session) {
-  
-  # # Initializing empty element containers for the report card
-  # report.elements <- reactiveValues(FMDB = NULL,
-  #                                   tableLT = NULL,
-  #                                   FMDBreport = NULL,
-  #                                   plotly_histogram = NULL,
-  #                                   plotly_graph = NULL)
-  # 
   
   # This section ensures that changes are not applied to any indicators UNTIL the Apply Changes button is clicked!!!
   lt.col <- eventReactive(input$applyInput, {input$lt.column}, ignoreNULL = FALSE)
@@ -222,7 +205,7 @@ server <- function(input, output, session) {
     
     sex.vec <- c("MLT.", "FLT.")
     df <- get(paste0(sex.vec[isolate(as.numeric(sex()))], isolate(year())))
-    df1 <- df[df$Age == isolate(as.character(age())), ]
+    df1 <- df[df$Age == isolate(as.character(age())), ] 
     df2 <- merge(if (isolate(year()) < 1968) {dept.before.1968.shp} else {dept.after.1968.shp}, df1, by.x = "code_dept", by.y = "PopName")
     df3 <- df2[order(df2$nom_dept),] # This is necessary to maintain concordance with the DataTable order of rows
     rownames(df3) <- 1:nrow(df3)     # and this helps to match the rows though user selection to the correct shape
@@ -261,22 +244,26 @@ server <- function(input, output, session) {
     
     input$applyInput      # Asserting dependency on pressing of the Apply Changes button
     
-    table.data <- st_set_geometry(spdf.data(), NULL) # Getting rid of the geometry column of sf to be able to extract tabular data
+    table.data <- st_set_geometry(spdf.data(), NULL) %>%    # Getting rid of the geometry column of sf to be able to extract tabular data
+                    mutate(ex = format(ex, big.mark = ".", decimal.mark = ","))     # Formatting column to show 2 decimal places and comma instead of decimal point
     
-    datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "Age", "mx", "ex")], 
+    
+    datatable(table.data[order(table.data[, "nom_dept"]), c("nom_dept", "code_dept", "Age", "mx", "ex")], 
               
-                  rownames = FALSE, colnames = c("Département", "Âge", "Taux de mortalité pour 1000 habitants", "Espérance de vie à (x) an(s)"),
+                  rownames = FALSE, colnames = c("Département", "Code", "Âge", "Taux de mortalité pour 1000 habitants", "Espérance de vie à (x) an(s)"),
               
                   class = "cell-border compact hover", 
               
-                  caption = htmltools::tags$caption(paste0("Tables de mortalité départementales pour l'année" isolate(year())," (", 
-       ifelse(isolate(sex()) == "1", "hommes",
-              ifelse(isolate(sex()) == "2", "femmes", stopApp())),")",) 
+                  caption = htmltools::tags$caption(paste0("Tables de mortalité départementales pour l'année ", isolate(year())," (", 
+                                                          ifelse(isolate(sex()) == "1", "hommes",
+                                                                 ifelse(isolate(sex()) == "2", "femmes", stopApp())),
+                                                          ifelse(isolate(sex()) == 1, " agés de ", " agées de "), isolate(age()), " ans)"), 
                                                     style = "color: #3c8dbc; font-size:24px; text-align: center; margin-top: 0px; font-weight: 700"), 
                   options = list(searching = FALSE,
                                  paging = FALSE, 
                                  scrollY = "200px",
-                                 list(order = list(0, 'desc'))
+                                 list(order = list(0, 'desc')),
+                                 columnDefs = list(list(className = 'dt-right', targets = 1:4)) # Right-justifying numeric columns
                             ), 
               
                   selection = list(mode = "single", selected = 1)
@@ -288,34 +275,19 @@ server <- function(input, output, session) {
   # Plotly histogram
   output$plotly_histogram <- renderPlotly({
 
-    #lt.col <- reactive({isolate(input$lt.column)})
-
     plot.dept <- if (lt.col() == "mx") {
                     spdf.data()$mx
                   } else if (lt.col() == "ex") {
                     spdf.data()$ex
                   }
 
-    labs.x <- if (lt.col() == "mx") {
-                paste0("Taux de mortalité pour 1000 habitants (mx)")
-                       
-                       # , \n(", isolate(ifelse(sex() == "1", "hommes",
-                       #                                                            ifelse(sex() == "2", "femmes", NA))),
-                       # ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " ans)")
-              } else if (lt.col() == "ex") {
-                paste0("Espérance de vie (ex)")
-
-                      # , (", isolate(ifelse(sex() == "1", "hommes",
-                      #                                            ifelse(sex() == "2", "femmes", NA))),
-                      #  ifelse(isolate(sex()) == 1, " agés ", " agées "), isolate(age()), " ans)")
-              }
+    labs.x <- if (lt.col() == "mx") {"Taux de mortalité pour 1000 habitants (mx)"} else if (lt.col() == "ex") {"Espérance de vie (ex)"}
 
     layout(
 
       plot_ly(
               x = plot.dept,
               autobinx = TRUE,
-              #xbins = list(start = min(map.dept), end = max(map.dept), size = 0.25),
               alpha = 0.6,
               type = "histogram",
               histnorm = "percent"
@@ -323,11 +295,9 @@ server <- function(input, output, session) {
            title = paste0("Histogramme des valeurs en ", isolate(year())),
            xaxis = list(title = labs.x,
                         zeroline = FALSE,
-                        automargin = TRUE,
-                        #dtick = 1,
-                        #tick0 = 0,
+                        automargin = FALSE,
                         tickmode = "linear",
-                        range = c(min(plot.dept), max(plot.dept)),
+                        range = c(min(plot.dept) - 0.5, max(plot.dept) + 0.5),
                         fixedrange = TRUE,
                         showticklabels = TRUE, 
                         tickcolor = 'rgb(127,127,127)',
@@ -357,8 +327,8 @@ server <- function(input, output, session) {
   })
   
   current.clickDT <- reactive({
-    req(input$tableLT_rows_selected) #req(input$tableLT_row_last_clicked)
-    input$tableLT_rows_selected #input$tableLT_row_last_clicked
+    req(input$tableLT_rows_selected) 
+    input$tableLT_rows_selected
     clickDT$current.click
   })
   
@@ -372,7 +342,6 @@ server <- function(input, output, session) {
   # Data for plotly line graph
   plot.df <- reactive({
                   
-                  #lt.col <- eventReactive({input$applyInput; "mx"} , {input$lt.column})
                   {input$tableLT_rows_selected}
                   
                   input$applyInput
@@ -380,8 +349,10 @@ server <- function(input, output, session) {
                   plot.data <- scatter.data() %>%
                     group_by(Year) %>% 
                     mutate(Min = if (lt.col() == "mx") {min(mx, na.rm = T)} else {min(ex, na.rm = T)},
-                           Pctile25 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[2])} else {unname(quantile(ex, na.rm = T)[2])},
-                           Pctile75 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[4])} else {unname(quantile(ex, na.rm = T)[4])},
+                           Pctile25 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[2])
+                                      } else {unname(quantile(ex, na.rm = T)[2])},
+                           Pctile75 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[4])
+                                      } else {unname(quantile(ex, na.rm = T)[4])},
                            Max = if (lt.col() == "mx") {max(mx, na.rm = T)} else {max(ex, na.rm = T)}) %>%
                     summarise(Min = mean(Min),
                               Pctile25 = mean(Pctile25),
@@ -394,27 +365,20 @@ server <- function(input, output, session) {
                     select(Year, lt.col()) %>%
                     rename_at(2, ~"France")
                   
-                  #if (!is.null(current.clickDT())) {
-                            plot.data.dept <- scatter.data() %>%
-                              filter(code_dept == if_else(isolate(as.numeric(year())) >= 1968, 
-                                                          match.sel.row.dept.after.1968[current.clickDT(), "code_dept"],
-                                                          match.sel.row.dept.before.1968[current.clickDT(), "code_dept"])
-                              ) %>% 
-                              select(Year, nom_dept, lt.col()) %>% 
-                              rename_at(3, ~"value")
-                            
-                            plot.data.join <- plot.data %>% 
-                              left_join(plot.data.france, by = "Year") %>% 
-                              left_join(plot.data.dept, by = "Year") %>% 
-                              select(Year, Min, Pctile25, Pctile75, Max, France, nom_dept, value)
+                 
+                  plot.data.dept <- scatter.data() %>%
+                    filter(code_dept == if_else(isolate(as.numeric(year())) >= 1968, 
+                                                match.sel.row.dept.after.1968[current.clickDT(), "code_dept"],
+                                                match.sel.row.dept.before.1968[current.clickDT(), "code_dept"])
+                    ) %>% 
+                    select(Year, nom_dept, lt.col()) %>% 
+                    rename_at(3, ~"value")
                   
-                  # } else {
-                  #   
-                  #           plot.data.join <- plot.data %>% 
-                  #             left_join(plot.data.france, by = "Year") %>% 
-                  #             select(Year, Min, Pctile25, Pctile75, Max, France)
-                  # }
-                  
+                  plot.data.join <- plot.data %>% 
+                    left_join(plot.data.france, by = "Year") %>% 
+                    left_join(plot.data.dept, by = "Year") %>% 
+                    select(Year, Min, Pctile25, Pctile75, Max, France, nom_dept, value)
+
                   return(plot.data.join)                
   
   })
@@ -423,36 +387,7 @@ server <- function(input, output, session) {
   # Plotly graph
   output$plotly_graph <- renderPlotly({
     
-    #lt.col <- reactive({isolate(input$lt.column)})
-    
     plot.data <- plot.df()
-    
-    # plot.data <- scatter.data() %>%
-    #   #filter(code_dept != "98") %>% 
-    #   #select(Year, mx, ex) %>% 
-    #   group_by(Year) %>% 
-    #   mutate(Min = if (lt.col() == "mx") {min(mx, na.rm = T)} else {min(ex, na.rm = T)},
-    #          Pctile25 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[2])} else {unname(quantile(ex, na.rm = T)[2])},
-    #          Pctile75 = if (lt.col() == "mx") {unname(quantile(mx, na.rm = T)[4])} else {unname(quantile(ex, na.rm = T)[4])},
-    #          Max = if (lt.col() == "mx") {max(mx, na.rm = T)} else {max(ex, na.rm = T)}) %>%
-    #   summarise(Min = mean(Min),
-    #             Pctile25 = mean(Pctile25),
-    #             Pctile75 = mean(Pctile75),
-    #             Max = mean(Max))
-    # 
-    # sex.vec <- c("MLT", "FLT")
-    # plot.data.france <- get(sex.vec[isolate(as.numeric(sex()))]) %>% 
-    #        filter(PopName == "98", Age == isolate(as.character(age()))) %>% 
-    #        select(Year, lt.col()) %>%
-    #        rename_at(2, ~"France")
-    #   
-    #   
-    # plot.data.join <- plot.data %>% 
-    #   left_join(plot.data.france, by = "Year") %>% 
-    #   select(Year, Min, Pctile25, Pctile75, Max, France) %>% 
-    #   melt(id.vars = "Year", variable.name = "Group", factorsAsStrings = FALSE)
-      
-    #plot.data.join$Group <- factor(plot.data.join$Group, levels = c("Min", "Pctile25", "Pctile75", "Max", "France"), ordered = TRUE)
     
     labs.y <- if (lt.col() == "mx") {
       "Taux de mortalité (mx)"
@@ -464,73 +399,78 @@ server <- function(input, output, session) {
     
     
     plot.data %>%
-      #group_by(Year) %>%
-      plot_ly(x = ~Year,
-              y = ~Min,
-              type = 'scatter',
-              mode = 'lines',
-              line = list(color = 'rgba(150,175,255,0)'),
-              showlegend = F,
-              name = 'Minimum',
-              hoverinfo = "x+y",                            # Only shows x and y values on hover
-              hoverlabel = list(bgcolor = "rgba(150,175,255,0.4)")) %>% 
-      add_trace(y = ~Max,
+      plot_ly() %>% 
+      add_trace(x = ~Year,
+                y = ~Min,
+                type = 'scatter',
+                mode = 'lines',
+                line = list(color = 'rgba(150,175,255,0)'),
+                showlegend = FALSE,
+                name = 'Min-Max',                             # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
+                hoverinfo = "x+y",                            # Only shows x and y values on hover
+                hoverlabel = list(bgcolor = "rgba(150,175,255,0.4)"),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$Min, 2), decimal.mark = ","), "<extra></extra>")
+                ) %>% 
+      add_trace(x = ~Year,
+                y = ~Max,
                 type = 'scatter',
                 mode = 'lines',
                 fill = 'tonexty',
                 fillcolor = 'rgba(150,175,255,0.4)',
                 line = list(color = 'rgba(150,175,255,0)'),
-                showlegend = T, 
+                showlegend = TRUE, 
                 name = 'Min-Max',                            # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
                 hoverinfo = "x+y",                           # Only shows x and y values on hover
-                hoverlabel = list(bgcolor = 'rgba(150,175,255,0.4)')) %>%                        
-      add_trace(y = ~Pctile25,
+                hoverlabel = list(bgcolor = 'rgba(150,175,255,0.4)'),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$Max, 2), decimal.mark = ","), "<extra></extra>")
+                ) %>%                        
+      add_trace(x = ~Year,
+                y = ~Pctile25,
                 type = 'scatter',
                 mode = 'lines',
                 line = list(color = 'rgba(90,190,255,0)'),
-                showlegend = F, 
-                name = '25e centile',
+                showlegend = FALSE, 
+                name = 'Intervalle inter-quartile',          # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS),
                 hoverinfo = "x+y",                           # Only shows x and y values on hover
-                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)')) %>% 
-      add_trace(y = ~Pctile75,
+                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)'),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$Pctile25, 2), decimal.mark = ","), "<extra></extra>")
+                ) %>% 
+      add_trace(x = ~Year,
+                y = ~Pctile75,
                 type = 'scatter',
                 mode = 'lines',
                 fill = 'tonexty',
                 fillcolor = 'rgba(90,190,255,0.4)',
                 line = list(color = 'rgba(90,190,255,0))'),
-                showlegend = T, 
-                name = 'Intervalle inter-quartile',                                # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
+                showlegend = TRUE, 
+                name = 'Intervalle inter-quartile',          # <---- THIS IS A FAKE TITLE (FOR EASIER WORKAROUND WITH LEGEND LABELS)
                 hoverinfo = "x+y",                           # Only shows x and y values on hover
-                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)')) %>% 
-      add_trace(y = ~France,
+                hoverlabel = list(bgcolor = 'rgba(90,190,255,0.4)'),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$Pctile75, 2), decimal.mark = ","), "<extra></extra>")
+                ) %>% 
+      add_trace(x = ~Year,
+                y = ~France,
                 type = 'scatter',
                 mode = 'lines',
                 line = list(color = 'rgba(120,120,255,1)'),
-                showlegend = T, 
+                showlegend = TRUE, 
                 name = 'FRANCE',
                 hoverinfo = "x+y+name",                      # Shows x, y, and name values on hover
-                hoverlabel = list(bgcolor = 'rgba(120,120,255,0.8)')) %>% 
-      add_trace(y = ~value,
+                hoverlabel = list(bgcolor = 'rgba(120,120,255,0.8)'),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$France, 2), decimal.mark = ","))
+                ) %>% 
+      add_trace(x = ~Year,
+                y = ~value,
                 type = 'scatter',
                 mode = 'lines',
                 line = list(color = 'rgba(255,0,0,0.7)'),
-                showlegend = T,
+                showlegend = TRUE,
                 name = ~nom_dept,
                 hoverinfo = "x+y+name",                      # Shows x, y, and name values on hover
-                hoverlabel = list(bgcolor = 'rgba(255,0,0,0.6)')),
-    
-    # plot.data %>% 
-    #   group_by(Group) %>% 
-    #   plot_ly(x = ~Year,
-    #           y = ~value,
-    #           type = "scatter", 
-    #           mode = "lines",
-    #           color = ~Group,
-    #           name = rep(c("Minimum", "25ème centile", "75ème centile", "Maximum", "France"), each = length(unique(plot.data.join$Year))),
-    #           hoverinfo = "text",
-    #           hovertext = rep(c("Minimum", "25ème centile", "75ème centile", "Maximum", "France"), each = length(unique(plot.data.join$Year)))
-    #   ),
-    
+                hoverlabel = list(bgcolor = 'rgba(255,0,0,0.6)'),
+                hovertemplate = paste0(plot.data$Year, ": ", format(round(plot.data$value, 2), decimal.mark = ","))
+                ),
+
       plot_bgcolor = 'rgb(229,229,229)',
       title = "Séries chronologiques",
       xaxis = list(title = "Année", zeroline = FALSE, fixedrange = FALSE, 
@@ -539,7 +479,7 @@ server <- function(input, output, session) {
       yaxis = list(title = labs.y, zeroline = FALSE, fixedrange = FALSE, 
                    gridcolor = 'rgb(255,255,255)', showticklabels = TRUE, tickcolor = 'rgb(127,127,127)', ticks = 'outside',
                    showspikes = TRUE, spikemode = "toaxis+marker", spikethickness = 2, spikedash = "solid"),
-      legend = list(x = 0.75, y = 0.975, bgcolor = 'rgba(255,255,255,0.35', xanchor = "right", orientation = "h")
+      legend = list(x = 0.825, y = 0.975, bgcolor = 'rgba(255,255,255,0.35)', xanchor = "right", orientation = "h")
 
     )
     
@@ -551,12 +491,9 @@ server <- function(input, output, session) {
   
     input$applyInput  # Asserting dependency on pressing of the Apply Changes button
     
-    #lt.col <- reactive({isolate(input$lt.column)})
-    
-    map.dept <- spdf.data()
+    map.dept <- spdf.data() 
     
     # Creating quantile breakdown of mx or ex
-    
     quantColor <- if (lt.col() == "mx") {
       colorBin("Reds", seq(min(map.dept$mx, na.rm = TRUE), 
                            max(map.dept$mx, na.rm = TRUE), 
@@ -606,8 +543,8 @@ server <- function(input, output, session) {
                                                 ifelse(sex() == "2", "femmes", NA))), ", chiffres arrondis)", "</b>",
                                  "<br>", "Nombre de décès à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                    " pour 1000 habitants = ",  round(map.dept$mx, 2),
-                                 "<br>", "L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
-                                   " = ", round(map.dept$ex, 2), " ans"),
+                                 "<br>", "Espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
+                                   " = ", format(round(map.dept$ex, 2), decimal.mark = ","), " ans"),
                   popupOptions = popupOptions(autoPan = FALSE, keepInView = TRUE, alpha = 0.5), 
                   highlightOptions = highlightOptions(fillColor = "gold", fillOpacity = 0.6, weight = 2),
                   layerId = ~code_dept) %>%
@@ -623,7 +560,7 @@ server <- function(input, output, session) {
                 title = paste0(isolate(ifelse(input$lt.column == "mx", paste0("Nombre de décès à ", map.dept$Age[1], 
                                                                               if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"},
                                                                               " pour 1000 habitants "),
-                                              paste0("L'espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"}))),
+                                              paste0("Espérance de vie à ", map.dept$Age[1], if (map.dept$Age[1] %in% c(0,1)) {" an"} else {" ans"}))),
                                "<br>", "(", isolate(year()), ", ",
                                isolate(ifelse(sex() == "1", "hommes",
                                               ifelse(sex() == "2", "femmes", stopApp()))), "):"),
@@ -631,8 +568,9 @@ server <- function(input, output, session) {
                 opacity = 1,
                 labFormat = function(type, cuts, p) {
                   n <- length(cuts)
-                  cuts <- paste0(format(cuts[-n], big.mark = ","),
-                                 " - ", format(cuts[-1], big.mark = ","))}) 
+                  cuts <- paste0(format(round(cuts[-n], 2), big.mark = ".", decimal.mark = ","),
+                                 " - ", format(round(cuts[-1], 2), big.mark = ".", decimal.mark = ","))
+                  }) 
       
 
     return(map1)
@@ -674,7 +612,6 @@ server <- function(input, output, session) {
   # Observer for proxies
   observe({  
     
-    #lt.col <- reactive({isolate(input$lt.column)})
     map.dept <- spdf.data()
  
     if (is.null(current.clickDT())) {
@@ -683,40 +620,20 @@ server <- function(input, output, session) {
       
     } else if (!is.null(current.clickDT())) {
       
-      # lng.hlight <- st_coordinates(map.dept[current.clickDT(),])[,1]
-      # lat.hlight <- st_coordinates(map.dept[current.clickDT(),])[,2]
-      
       leafletProxy("FMDBreport") %>%        
-        
-        # addPolygons(lng = lng.hlight,
-        #             lat = lat.hlight,
-        #             fillColor = "transparent",
-        #             fillOpacity = 0,
-        #             color = "gold",
-        #             weight = 3,
-        #             stroke = TRUE,
-        #             layerId = "Selected"
-        # ) %>% 
         
         flyToBounds(lng1 = unname(st_bbox(map.dept[current.clickDT(),])[1]),
                     lng2 = unname(st_bbox(map.dept[current.clickDT(),])[3]),
                     lat1 = unname(st_bbox(map.dept[current.clickDT(),])[2]),
                     lat2 = unname(st_bbox(map.dept[current.clickDT(),])[4])
         )
-        # ) %>% 
-        # #removeShape(layerId = "Selected") %>% 
-
-
-      
-      # print(paste0("Current dept.id: ", dept.id[current.clickDT()]))
-      # print(paste0("Last click: ", last.clickDT()))
-      # print(head(plot.df()))
-      
-      
     }
     
   })
   
+  
+  
+  # WIP : Hold off for the time being
   
   # # Create a PDF to export
   # output$report = downloadHandler(
@@ -734,8 +651,6 @@ server <- function(input, output, session) {
   #   }
   # )
   
-  
-  # WIP : Hold off for the time being
   #
   # # Make and download the report card
   # output$report <- downloadHandler(
